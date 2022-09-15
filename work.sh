@@ -1,15 +1,10 @@
 #!/bin/bash
 
-# ------------------------------------------------
-#script to generate dataset for demuxlet testing
-# ------------------------------------------------
-
-
 test_directory=/SGRNJ03/randd/user/fuxin/PROJECTS/demultiplex/test/YiHe_sub
 conda activate demuxlet
 
 #取chr21 的数据来测试，减少数据运行时间
-cd ${test_directory}
+cd test_directory
 mkdir bam
 
 samtools view  -hb ../YiHe/bam/bw_1.bam 21 > bam/bw_1.chr21.bam
@@ -19,6 +14,12 @@ samtools view  -hb ../YiHe/bam/pbmc_2.bam 21 > bam/pbmc_2.chr21.bam
 samtools index bam/bw_1.chr21.bam
 samtools index bam/pbmc_1.chr21.bam
 samtools index bam/pbmc_2.chr21.bam
+
+# fix bam barcode
+python fix_BC_for_bamfile.py \
+/Personal/fuxin/dfuxin/PROJECTS/demultiplex/test/data/babz3_001/outs/possorted_genome_bam.bam \
+/Personal/fuxin/dfuxin/PROJECTS/demultiplex/test/data/bam/babz3_001.fixBC.bam \
+babz3_001
 
 # to merge and index parsed BAM files
 
@@ -47,9 +48,11 @@ sed -i "s|\([A-Z]\+\)\-1|\1\-pbmc_2|g" barcodes_merged/barcodes_pbmc_2.tsv
 
 cat barcodes_merged/barcodes_bw_1.tsv barcodes_merged/barcodes_pbmc_1.tsv barcodes_merged/barcodes_pbmc_2.tsv > barcodes_merged/barcodes_merged.tsv
 
-# 
+#
 Rscript /generate_awk_lookup_tables_doublets.R 
 # 
+
+
 
 ##run doublets simulation
 samtools view -h bam_merged/bam_merged.bam | \
@@ -59,7 +62,18 @@ doublets_sims/20pc/lookup_table_doublets_chr21_20pc.tsv - | \
 samtools view -bo doublets_sims/20pc/bam_merged_doublets_chr21_20pc.bam
 
 #genotype
-#cellsnp-lite call不出变异 
+#cellsnp-lite call不出变异 (chr21~1h)
+cellsnp-lite -s ../bam/bw_1.chr21.bam -b ../barcodes_merged/barcodes_bw_1.tsv -O ./bw_1 -p 10 --minMAF=0.01 --minCOUNT=50
+cellsnp-lite -s ../bam/pbmc_1.chr21.bam -b ../barcodes_merged/barcodes_pbmc_1.tsv -O ./pbmc_1 -p 10 --minMAF=0.01 --minCOUNT=50
+cellsnp-lite -s ../bam/pbmc_2.chr21.bam -b ../barcodes_merged/barcodes_pbmc_2.tsv -O ./pbmc_2 -p 10 --minMAF=0.01 --minCOUNT=50
+
+gunzip -c ./bw_1/cellSNP.base.vcf.gz > ./bw_1/cellSNP.base-bgz.vcf
+bgzip ./bw_1/cellSNP.base-bgz.vcf
+gunzip -c ./pbmc_1/cellSNP.base.vcf.gz > ./pbmc_1/cellSNP.base-bgz.vcf
+bgzip ./pbmc_1/cellSNP.base-bgz.vcf
+gunzip -c ./pbmc_2/cellSNP.base.vcf.gz > ./pbmc_2/cellSNP.base-bgz.vcf
+bgzip ./pbmc_2/cellSNP.base-bgz.vcf
+
 #改用bcftools
 samtools mpileup -t DP -t SP -t DP4 -uf \
 /SGRNJ/Public/Database/genome/homo_sapiens/ensembl_92/Homo_sapiens.GRCh38.fa \
