@@ -1,111 +1,103 @@
 #!/bin/bash
 
-test_directory=/SGRNJ03/randd/user/fuxin/PROJECTS/demultiplex/test/YiHe_sub
+test_directory=/SGRNJ03/randd/user/fuxin/PROJECTS/demultiplex/test/     
 conda activate demuxlet
 
-#取chr21 的数据来测试，减少数据运行时间
 cd test_directory
-mkdir bam
 
-samtools view  -hb ../YiHe/bam/bw_1.bam 21 > bam/bw_1.chr21.bam
-samtools view  -hb ../YiHe/bam/pbmc_1.bam 21 > bam/pbmc_1.chr21.bam
-samtools view  -hb ../YiHe/bam/pbmc_2.bam 21 > bam/pbmc_2.chr21.bam
+# download test data
+curl ftp.ebi.ac.uk/vol1/fastq/ERR386/002/ERR3863702/ERR3863702_1.fastq.gz -o ./data/souporcell/fastq/babz3_001/babz3_S1_L001_R1_001.fastq.gz
+curl ftp.ebi.ac.uk/vol1/fastq/ERR386/002/ERR3863702/ERR3863702_2.fastq.gz -o ./data/souporcell/fastq/babz3_001/babz3_S1_L001_R2_001.fastq.gz
+curl ftp.ebi.ac.uk/vol1/fastq/ERR386/003/ERR3863703/ERR3863703_1.fastq.gz -o ./data/souporcell/fastq/babz3_002/babz3_S1_L001_R1_002.fastq.gz
+curl ftp.ebi.ac.uk/vol1/fastq/ERR386/003/ERR3863703/ERR3863703_2.fastq.gz -o ./data/souporcell/fastq/babz3_002/babz3_S1_L001_R2_002.fastq.gz
 
-samtools index bam/bw_1.chr21.bam
-samtools index bam/pbmc_1.chr21.bam
-samtools index bam/pbmc_2.chr21.bam
+# run cellranger
+cellranger count --id=babz3_001 \
+--transcriptome=/SGRNJ03/randd/user/fuxin/PROJECTS/demultiplex/test/data/Homo_sapiens.GRCh38.92 \
+--fastqs=/SGRNJ03/randd/user/fuxin/PROJECTS/demultiplex/test/data/souporcell/fastq/babz3_001 \
+----sample=babz3 \
+--nosecondary \
+--jobmode=local \
+--localcores=10 \
+--localmem=50 \
+--localvmem=100
+
+cellranger count --id=babz3_002 \
+--transcriptome=/SGRNJ03/randd/user/fuxin/PROJECTS/demultiplex/test/data/Homo_sapiens.GRCh38.92 \
+--fastqs=/SGRNJ03/randd/user/fuxin/PROJECTS/demultiplex/test/data/souporcell/fastq/babz3_002 \
+----sample=babz3 \
+--nosecondary \
+--jobmode=local \
+--localcores=10 \
+--localmem=50 \
+--localvmem=100
+
 
 # fix bam barcode
-python fix_BC_for_bamfile.py \
-/Personal/fuxin/dfuxin/PROJECTS/demultiplex/test/data/babz3_001/outs/possorted_genome_bam.bam \
-/Personal/fuxin/dfuxin/PROJECTS/demultiplex/test/data/bam/babz3_001.fixBC.bam \
+python /SGRNJ03/randd/user/fuxin/PROJECTS/demultiplex/test/fix_BC_for_bamfile.py \
+data/babz3_001/outs/possorted_genome_bam.bam \
+data/bam/babz3_001.fixBC.bam \
 babz3_001
+
+python /SGRNJ03/randd/user/fuxin/PROJECTS/demultiplex/test/fix_BC_for_bamfile.py \
+data/babz3_002/outs/possorted_genome_bam.bam \
+data/bam/babz3_001.fixBC.bam \
+babz3_002
 
 # to merge and index parsed BAM files
 
 mkdir bam_merged
 
-samtools merge bam_merged/bam_merged.bam bam/bw_1.chr21.bam bam/pbmc_1.chr21.bam bam/pbmc_2.chr21.bam
+samtools merge data/bam_merged/bam_merged.bam data/bam/babz3_001.fixBC.bam data/bam/babz3_002.fixBC.bam
 
-samtools index bam_merged/bam_merged.bam
+samtools index data/bam_merged/bam_merged.bam
 
 # to parse and merge cell barcode files
-mkdir barcodes_merged
+mkdir data/barcodes_merged
 
-## run celescope
-celescope rna count --genomeDir /SGRNJ/Public/Database/genome/homo_sapiens/ensembl_92 --outdir celescope/bw_1/05.count --sample bw_1 --bam bam/bw_1.chr21.bam
-celescope rna count --genomeDir /SGRNJ/Public/Database/genome/homo_sapiens/ensembl_92 --outdir celescope/pbmc_1/05.count --sample pbmc_1 --bam bam/pbmc_1.chr21.bam
-celescope rna count --genomeDir /SGRNJ/Public/Database/genome/homo_sapiens/ensembl_92 --outdir celescope/pbmc_2/05.count --sample pbmc_2 --bam bam/pbmc_2.chr21.bam
+cp data/babz3_001/outs/filtered_feature_bc_matrix/barcodes.tsv.gz data/barcodes_merged/babz3_001_barcodes.tsv.gz
+cp data/babz3_002/outs/filtered_feature_bc_matrix/barcodes.tsv.gz data/barcodes_merged/babz3_002_barcodes.tsv.gz
 
+gunzip data/barcodes_merged/babz3_001_barcodes.tsv.gz
+gunzip data/barcodes_merged/babz3_002_barcodes.tsv.gz
 
-ln -s /SGRNJ03/randd/user/fuxin/PROJECTS/demultiplex/test/YiHe_sub/celescope/bw_1/05.count/bw_1_matrix_10X/barcodes.tsv  barcodes_merged/barcodes_bw_1.tsv
-ln -s /SGRNJ03/randd/user/fuxin/PROJECTS/demultiplex/test/YiHe_sub/celescope/pbmc_1/05.count/pbmc_1_matrix_10X/barcodes.tsv barcodes_merged/barcodes_pbmc_1.tsv
-ln -s /SGRNJ03/randd/user/fuxin/PROJECTS/demultiplex/test/YiHe_sub/celescope/pbmc_2/05.count/pbmc_2_matrix_10X/barcodes.tsv barcodes_merged/barcodes_pbmc_2.tsv
+sed -i "s|\([A-Z]\+\)\-1|\1\-babz3_001|g" data/barcodes_merged/babz3_001_barcodes.tsv
+sed -i "s|\([A-Z]\+\)\-1|\1\-babz3_002|g" data/barcodes_merged/babz3_001_barcodes.tsv
 
-sed -i "s|\([A-Z]\+\)\-1|\1\-bw_1|g" barcodes_merged/barcodes_bw_1.tsv
-sed -i "s|\([A-Z]\+\)\-1|\1\-pbmc_1|g" barcodes_merged/barcodes_pbmc_1.tsv
-sed -i "s|\([A-Z]\+\)\-1|\1\-pbmc_2|g" barcodes_merged/barcodes_pbmc_2.tsv
+cat data/barcodes_merged/babz3_001_barcodes.tsv data/barcodes_merged/babz3_002_barcodes.tsv > data/barcodes_merged/barcodes_merged.tsv  
 
-cat barcodes_merged/barcodes_bw_1.tsv barcodes_merged/barcodes_pbmc_1.tsv barcodes_merged/barcodes_pbmc_2.tsv > barcodes_merged/barcodes_merged.tsv
+# run doublets simulation
 
-#
-Rscript /generate_awk_lookup_tables_doublets.R 
-# 
+Rscript /SGRNJ03/randd/user/fuxin/PROJECTS/demultiplex/test/generate_awk_lookup_tables_doublets.R
 
-
-
-##run doublets simulation
 samtools view -h bam_merged/bam_merged.bam | \
 awk \
 'NR==1 { next } FNR==NR { a[$1]=$2; next } (i=gensub(/.*CB\:Z\:([A-Za-z]+\-[A-Za-z0-9]+).*/, "\\1", 1, $0)) in a { gsub(i, a[i]) }1' \
-doublets_sims/20pc/lookup_table_doublets_chr21_20pc.tsv - | \
-samtools view -bo doublets_sims/20pc/bam_merged_doublets_chr21_20pc.bam
+doublets_sims/20pc/lookup_table_doublets_20pc.tsv - | \
+samtools view -bo doublets_sims/20pc/bam_merged_doublets_20pc.bam
 
-#genotype
-#cellsnp-lite call不出变异 (chr21~1h)
-cellsnp-lite -s ../bam/bw_1.chr21.bam -b ../barcodes_merged/barcodes_bw_1.tsv -O ./bw_1 -p 10 --minMAF=0.01 --minCOUNT=50
-cellsnp-lite -s ../bam/pbmc_1.chr21.bam -b ../barcodes_merged/barcodes_pbmc_1.tsv -O ./pbmc_1 -p 10 --minMAF=0.01 --minCOUNT=50
-cellsnp-lite -s ../bam/pbmc_2.chr21.bam -b ../barcodes_merged/barcodes_pbmc_2.tsv -O ./pbmc_2 -p 10 --minMAF=0.01 --minCOUNT=50
-
-gunzip -c ./bw_1/cellSNP.base.vcf.gz > ./bw_1/cellSNP.base-bgz.vcf
-bgzip ./bw_1/cellSNP.base-bgz.vcf
-gunzip -c ./pbmc_1/cellSNP.base.vcf.gz > ./pbmc_1/cellSNP.base-bgz.vcf
-bgzip ./pbmc_1/cellSNP.base-bgz.vcf
-gunzip -c ./pbmc_2/cellSNP.base.vcf.gz > ./pbmc_2/cellSNP.base-bgz.vcf
-bgzip ./pbmc_2/cellSNP.base-bgz.vcf
-
-#改用bcftools
+# genotype calling with bcftools
 samtools mpileup -t DP -t SP -t DP4 -uf \
-/SGRNJ/Public/Database/genome/homo_sapiens/ensembl_92/Homo_sapiens.GRCh38.fa \
-bam/bw_1.chr21.bam | \
-bcftools call -f GQ -f GP -mv > genotype/bw_1.vcf
+/SGRNJ/Public/Database/genome/homo_sapiens/ensembl_92/Homo_sapiens.GRCh38.fa data/bam/babz3_001.fixBC.bam | \
+bcftools call -f GQ -f GP -mv > data/genotype/babz3_001.vcf
 
 samtools mpileup -t DP -t SP -t DP4 -uf \
-/SGRNJ/Public/Database/genome/homo_sapiens/ensembl_92/Homo_sapiens.GRCh38.fa bam/pbmc_1.chr21.bam | \
-bcftools call -f GQ -f GP -mv > genotype/pbmc_1.vcf
+/SGRNJ/Public/Database/genome/homo_sapiens/ensembl_92/Homo_sapiens.GRCh38.fa data/bam/babz3_002.fixBC.bam | \
+bcftools call -f GQ -f GP -mv > data/genotype/babz3_002.vcf
 
-samtools mpileup -t DP -t SP -t DP4 -uf \
-/SGRNJ/Public/Database/genome/homo_sapiens/ensembl_92/Homo_sapiens.GRCh38.fa bam/pbmc_2.chr21.bam | \
-bcftools call -f GQ -f GP -mv > genotype/pbmc_2.vcf
+bgzip data/genotype/babz3_001.vcf
+bgzip data/genotype/babz3_002.vcf
 
+bcftools index -t data/genotype/babz3_001.vcf.gz
+bcftools index -t data/genotype/babz3_002.vcf.gz
 
-#vcf文件的合并
-#vcf-concat ./genotype/bw_1.1.vcf ./genotype/pbmc_1.1.vcf ./genotype/pbmc_2.1.vcf > ./genotype/cellSNP.base-merged.vcf
-bgzip bw_1.1.vcf
-bgzip pbmc_1.1.vcf
-bgzip pbmc_2.1.vcf
-
-bcftools index -t bw_1.1.vcf.gz
-bcftools index -t pbmc_1.1.vcf.gz
-bcftools index -t pbmc_2.1.vcf.gz
-
-vcf-merge ./genotype/bw_1.1.vcf.gz ./genotype/pbmc_1.1.vcf.gz ./genotype/pbmc_2.1.vcf.gz > ./genotype/cellSNP.base-merged.vcf
-
-
+vcf-merge data/genotype/data/genotype/babz3_001.vcf.gz data/genotype/babz3_002.vcf.gz > data/genotype/cellSNP.base-merged.vcf
 
 #run demuxlet
 /SGRNJ03/randd/user/fuxin/PROJECTS/demultiplex/demuxlet/demuxlet \
---sam doublets_sims/20pc/bam_merged_doublets_chr21_20pc.bam
+--sam doublets_sims/20pc/bam_merged_doublets_20pc.bam
 --vcf genotype/cellSNP.base-merged.vcf
+--group-list barcodes_merged/barcodes_merged.tsv
+--write-pair
 --out output
 --alpha 0.3
